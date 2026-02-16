@@ -1,3 +1,5 @@
+export const config = { maxDuration: 30 };
+
 export default async function handler(req, res) {
   const raw = req.query._p || req.url.replace(/^\/api\/r\/?/, "").replace(/^\/r\/?/, "");
   if (!raw) return res.status(400).send("Bad request");
@@ -32,6 +34,7 @@ export default async function handler(req, res) {
         "Accept": req.headers["accept"] || "*/*",
         "Accept-Encoding": "identity",
         "Referer": origin + "/",
+        "Origin": origin,
       },
       redirect: "follow",
     });
@@ -40,8 +43,9 @@ export default async function handler(req, res) {
     const status = upstreamRes.status;
 
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS, HEAD");
     res.setHeader("Access-Control-Allow-Headers", "*");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
 
     if (req.method === "OPTIONS") return res.status(200).end();
 
@@ -49,6 +53,8 @@ export default async function handler(req, res) {
       "x-frame-options", "content-security-policy",
       "content-security-policy-report-only", "content-encoding",
       "transfer-encoding", "connection", "keep-alive",
+      "cross-origin-resource-policy", "cross-origin-embedder-policy",
+      "cross-origin-opener-policy",
     ]);
 
     for (const [key, value] of upstreamRes.headers.entries()) {
@@ -59,17 +65,18 @@ export default async function handler(req, res) {
 
     const isHTML = ct.includes("text/html");
     const isCSS = ct.includes("text/css");
+    const isJS = ct.includes("javascript");
     const encodedOrigin = segs[0];
 
-    if (isHTML || isCSS) {
+    if (isHTML) {
       let body = await upstreamRes.text();
-      if (isHTML) {
-        body = body.replace(/(src|href|action)=(["'])\//g, `$1=$2/r/${encodedOrigin}/`);
-        body = body.replace(/<meta[^>]*content-security-policy[^>]*>/gi, "");
-      }
-      if (isCSS) {
-        body = body.replace(/url\(\s*(['"]?)\//g, `url($1/r/${encodedOrigin}/`);
-      }
+      body = body.replace(/(src|href|action)=(["'])\//g, `$1=$2/r/${encodedOrigin}/`);
+      body = body.replace(/<meta[^>]*content-security-policy[^>]*>/gi, "");
+      body = body.replace(/<meta[^>]*http-equiv\s*=\s*["']?X-Frame-Options[^>]*>/gi, "");
+      res.status(status).send(body);
+    } else if (isCSS) {
+      let body = await upstreamRes.text();
+      body = body.replace(/url\(\s*(['"]?)\//g, `url($1/r/${encodedOrigin}/`);
       res.status(status).send(body);
     } else {
       const buffer = Buffer.from(await upstreamRes.arrayBuffer());

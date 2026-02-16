@@ -515,7 +515,8 @@ const _d = [{"name":"1 on 1 Basketball","url":"https://www.hoodamath.com/mobile/
 // ===== CONFIG =====
 const _k = [108,101,116,32,109,101,32,99,111,111,107];
 const _p = String.fromCharCode(..._k);
-function _rw(u){try{const o=new URL(u);const e=btoa(o.origin).replace(/=+$/,"");const p=o.pathname.replace(/\/+$/,"")||"";return"/r/"+e+p+o.search+o.hash}catch(x){return u}}
+const _bk=["classroom-6x.io","www.hoodamath.com","soulpeacemind.com"];
+function _rw(u){try{const o=new URL(u);if(_bk.some(d=>o.hostname===d))return u;const e=btoa(o.origin).replace(/=+$/,"");const p=o.pathname.replace(/\/+$/,"")||"";return"/r/"+e+p+o.search+o.hash}catch(x){return u}}
 const NOTE_COLORS = [
   "#fffaad", "#ffd6e0", "#c1f0c1", "#b8e0ff", "#e8ccff",
   "#ffd4a8", "#c8f7dc", "#ffe0f0", "#d4f0ff", "#fff0b8"
@@ -887,7 +888,7 @@ function _renderExt(filter = "") {
   }
 
   grid.innerHTML = filtered.map(g => {
-    const img = '<img src="' + _rw(g.img) + '" alt="" loading="lazy" onerror="this.style.background=\'#1a1a2e\';this.style.display=\'none\'">';
+    const img = '<img src="' + g.img + '" alt="" loading="lazy" onerror="this.style.background=\'#1a1a2e\';this.style.display=\'none\'">';
     const name = '<div class="ext-label">' + escapeHtml(g.name) + '</div>';
     return '<div class="ext-card" data-url="' + escapeHtml(g.url) + '" data-name="' + escapeHtml(g.name) + '">' + img + name + '</div>';
   }).join("");
