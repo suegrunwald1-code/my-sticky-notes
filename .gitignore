@@ -1,0 +1,7 @@
+.vercel
+node_modules
+*.json.bak
+classroom6x_games.json
+classroom20x_games.json
+hooda_math_games.json
+merge_games.py

@@ -1,0 +1,15 @@
+{
+  "trailingSlash": false,
+  "rewrites": [
+    { "source": "/r/:path*", "destination": "/api/r?_p=:path*" }
+  ],
+  "headers": [
+    {
+      "source": "/r/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    }
+  ]
+}
