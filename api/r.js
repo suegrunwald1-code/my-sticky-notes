@@ -48,7 +48,11 @@ function rewriteHtml(body, encodedOrigin, restPath) {
   body = body.replace(/<meta[^>]*http-equiv\s*=\s*["']?X-Frame-Options[^>]*>/gi, "");
 
   // 6. Inject <base> tag and security script
-  const proxyBase = `/r/${encodedOrigin}${restPath}${restPath.endsWith("/") ? "" : "/"}`;
+  // Strip filename from restPath so relative assets resolve to the directory
+  const basePath = restPath.includes(".") && !restPath.endsWith("/")
+    ? restPath.replace(/\/[^/]*$/, "/")
+    : restPath + (restPath.endsWith("/") ? "" : "/");
+  const proxyBase = `/r/${encodedOrigin}${basePath}`;
   const baseTag = `<base href="${proxyBase}">`;
   const secScript = `<script>window.open=function(){return null};window.__open=function(){return null};</script>`;
   const inject = baseTag + secScript;
@@ -60,6 +64,17 @@ function rewriteHtml(body, encodedOrigin, restPath) {
     body = body.replace("<HEAD>", `<HEAD>${inject}`);
   } else {
     body = inject + body;
+  }
+
+  // 7. GD game wrapper fallback: if SDK never fires SDK_GAME_START, load game directly
+  if (body.includes("gamedistribution-jssdk") && (body.includes('id=game') || body.includes('id="game"'))) {
+    // Extract the gameSrc from the inline script (already rewritten to proxy URL by step 3c)
+    const srcMatch = body.match(/gameSrc\s*=\s*["']([^"']+)["']/);
+    if (srcMatch) {
+      const gameSrc = srcMatch[1].replace(/["']\s*\+\s*searchPart/, "");
+      const fallback = `<script>(function(){var _fl=false;var _t=setTimeout(function(){var f=document.getElementById("game");if(f&&!f.src&&!_fl){_fl=true;f.src="${gameSrc.replace(/"/g, '\\"')}"}},3000);var _oo=window.GD_OPTIONS&&window.GD_OPTIONS.onEvent;if(window.GD_OPTIONS){window.GD_OPTIONS.onEvent=function(e){if(e&&e.name==="SDK_GAME_START"){_fl=true;clearTimeout(_t)}if(_oo)return _oo.call(this,e)}}})();</script>`;
+      body = body.replace("</body>", fallback + "</body>");
+    }
   }
 
   return body;
