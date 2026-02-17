@@ -15,18 +15,27 @@ function rewriteHtml(body, encodedOrigin, restPath) {
   // 1. Rewrite absolute paths (starting with /) to go through proxy with same origin
   body = body.replace(/(src|href|action|poster)=(["'])\//g, `$1=$2/r/${encodedOrigin}/`);
 
-  // 2. Rewrite full https:// URLs in src/href/action/poster attributes to go through proxy
+  // 2. Rewrite protocol-relative URLs (//domain.com/path) in attributes
+  body = body.replace(/(src|href|action|poster)=(["'])(\/\/[a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,}\/[^"']*)(["'])/gi, (match, attr, q1, url, q2) => {
+    return `${attr}=${q1}${toProxy('https:' + url)}${q2}`;
+  });
+  // 3. Rewrite full https:// URLs in src/href/action/poster attributes to go through proxy
   body = body.replace(/(src|href|action|poster)=(["'])(https?:\/\/[^"']+)(["'])/gi, (match, attr, q1, url, q2) => {
-    // Skip data: urls, blob: urls, javascript: urls, and anchors (#)
     if (url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("javascript:")) return match;
-    // Skip Google Analytics and common tracking scripts that don't need proxying
-    // Actually, proxy everything to mask all external origins
     return `${attr}=${q1}${toProxy(url)}${q2}`;
   });
 
-  // 3. Rewrite iframe src assignments in inline scripts
+  // 3a. Rewrite iframe src assignments in inline scripts
   body = body.replace(/(\.src\s*=\s*)(["'])(https?:\/\/[^"']+)(["'])/gi, (match, prefix, q1, url, q2) => {
     return `${prefix}${q1}${toProxy(url)}${q2}`;
+  });
+  // 3b. Rewrite setAttribute('src', 'https://...') in inline scripts
+  body = body.replace(/(setAttribute\s*\(\s*["']src["']\s*,\s*)(["'])(https?:\/\/[^"']+)(["'])/gi, (match, prefix, q1, url, q2) => {
+    return `${prefix}${q1}${toProxy(url)}${q2}`;
+  });
+  // 3c. Rewrite protocol-relative URLs (//domain.com/path) in inline JS string literals
+  body = body.replace(/(["'])(\/\/[a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,}\/[^"']*)(["'])/g, (match, q1, url, q2) => {
+    return `${q1}${toProxy('https:' + url)}${q2}`;
   });
 
   // 4. Rewrite window.location and document.location assignments
@@ -67,6 +76,18 @@ function rewriteCss(body, encodedOrigin) {
 }
 
 function rewriteJs(body, encodedOrigin) {
+  // Neutralize domain-check redirects to blocked pages
+  body = body.replace(/window\.location\.href\s*=\s*[^;]*blocked\.html[^;]*;/gi, 'void 0;');
+  // Neutralize bloc_gard domain blocking checks
+  body = body.replace(/\.bloc_gard\s*&&\s*!0\s*===\s*[^.]*\.bloc_gard\.enabled/g, 'false');
+  // Neutralize "to-blocked-page" redirect behavior
+  body = body.replace(/"to-blocked-page"\s*===\s*\w+\s*&&\s*this\._redirectToBlocking\([^)]*\)/g, 'false');
+  body = body.replace(/this\._redirectToBlocking\([^)]*\)/g, 'void 0');
+
+  // Rewrite protocol-relative URLs (//domain.com/path) in JS
+  body = body.replace(/(["'])(\/\/[a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,}\/[^"']*)(["'])/g, (match, q1, url, q2) => {
+    return `${q1}${toProxy('https:' + url)}${q2}`;
+  });
   // Rewrite ALL https:// string literals in JS (single/double quotes)
   body = body.replace(/(["'])(https?:\/\/[^"']+)(["'])/gi, (match, q1, url, q2) => {
     if (url.startsWith("data:") || url.startsWith("blob:")) return match;
