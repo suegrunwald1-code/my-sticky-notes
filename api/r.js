@@ -62,7 +62,10 @@ function rewriteHtml(body, encodedOrigin, restPath) {
     return `${prefix}${q1}${toProxy(url)}${q2}`;
   });
 
-  // 5. Remove CSP and X-Frame-Options meta tags
+  // 5. Remove target="_blank" and target="_new" from all tags
+  body = body.replace(/\s*target\s*=\s*["'](_blank|_new|blank|new)["']/gi, "");
+
+  // 5b. Remove CSP and X-Frame-Options meta tags
   body = body.replace(/<meta[^>]*content-security-policy[^>]*>/gi, "");
   body = body.replace(/<meta[^>]*http-equiv\s*=\s*["']?X-Frame-Options[^>]*>/gi, "");
 
@@ -73,7 +76,26 @@ function rewriteHtml(body, encodedOrigin, restPath) {
     : restPath + (restPath.endsWith("/") ? "" : "/");
   const proxyBase = `/r/${encodedOrigin}${basePath}`;
   const baseTag = `<base href="${proxyBase}">`;
-  const secScript = `<script>window.open=function(){return null};window.__open=function(){return null};` +
+  const secScript = `<script>` +
+    // Block window.open permanently (non-configurable so games can't restore it)
+    `Object.defineProperty(window,"open",{value:function(){return null},writable:false,configurable:false});` +
+    `Object.defineProperty(window,"__open",{value:function(){return null},writable:false,configurable:false});` +
+    // Intercept clicks: prevent target=_blank, block navigation outside proxy
+    `document.addEventListener("click",function(e){` +
+    `var a=e.target;while(a&&a.tagName!=="A")a=a.parentElement;` +
+    `if(!a)return;` +
+    // Remove target="_blank" at click time
+    `if(a.target==="_blank"||a.target==="_new"||a.target==="blank"||a.target==="new")a.removeAttribute("target");` +
+    // Block links that go outside the proxy
+    `var h=a.href;if(h&&!h.startsWith(location.origin)&&!h.startsWith("/")&&!h.startsWith("#")&&!h.startsWith("javascript:")){e.preventDefault();e.stopPropagation()}` +
+    `},true);` +
+    // MutationObserver: strip target="_blank" from dynamically added links
+    `new MutationObserver(function(ms){ms.forEach(function(m){m.addedNodes.forEach(function(n){` +
+    `if(n.nodeType===1){` +
+    `if(n.tagName==="A"&&(n.target==="_blank"||n.target==="_new"))n.removeAttribute("target");` +
+    `var links=n.querySelectorAll&&n.querySelectorAll("a[target=_blank],a[target=_new]");` +
+    `if(links)links.forEach(function(l){l.removeAttribute("target")})` +
+    `}})})}).observe(document.documentElement,{childList:true,subtree:true});` +
     // Interceptor: rewrite all dynamic requests to use full-URL encoding
     `(function(){` +
     `var K=[83,116,105,99,107,121];` +
@@ -86,6 +108,9 @@ function rewriteHtml(body, encodedOrigin, restPath) {
     // Override element src/href setters for dynamic elements
     `function W(tag,attr){var d=Object.getOwnPropertyDescriptor(tag.prototype,attr);if(d&&d.set){var os=d.set;Object.defineProperty(tag.prototype,attr,{set:function(v){os.call(this,R(v))},get:d.get})}}` +
     `try{W(HTMLImageElement,"src");W(HTMLScriptElement,"src");W(HTMLAudioElement,"src");W(HTMLVideoElement,"src");W(HTMLSourceElement,"src");W(HTMLIFrameElement,"src");W(HTMLLinkElement,"href")}catch(e){}` +
+    // Block window.location navigations outside proxy
+    `var _loc=Object.getOwnPropertyDescriptor(window.__proto__,"location")||Object.getOwnPropertyDescriptor(Window.prototype,"location");` +
+    `if(_loc&&_loc.set){var _ls=_loc.set;Object.defineProperty(window,"location",{get:_loc.get,set:function(v){if(typeof v==="string"&&v.match(/^https?:\\/\\//i)){_ls.call(this,R(v))}else{_ls.call(this,v)}},configurable:true})}` +
     `})();</script>`;
   const inject = baseTag + secScript;
   if (body.includes("<head>")) {
@@ -123,6 +148,11 @@ function rewriteCss(body, encodedOrigin) {
 }
 
 function rewriteJs(body, encodedOrigin) {
+  // Neutralize window.open calls in JS
+  body = body.replace(/window\.open\s*\(/g, '(function(){return null})(');
+  // Neutralize target="_blank" assignments in JS
+  body = body.replace(/\.target\s*=\s*["']_blank["']/g, '.target="_self"');
+  body = body.replace(/\.target\s*=\s*["']_new["']/g, '.target="_self"');
   // Neutralize domain-check redirects to blocked pages
   body = body.replace(/window\.location\.href\s*=\s*[^;]*blocked\.html[^;]*;/gi, 'void 0;');
   // Neutralize bloc_gard domain blocking checks
