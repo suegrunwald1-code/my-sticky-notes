@@ -1,5 +1,4 @@
 {
-  "trailingSlash": true,
   "rewrites": [
     { "source": "/r/:path*", "destination": "/api/r?_p=:path*" }
   ],

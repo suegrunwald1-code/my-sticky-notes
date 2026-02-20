@@ -160,6 +160,7 @@ export default async function handler(req, res) {
   const raw = req.query._p || req.url.replace(/^\/api\/r\/?/, "").replace(/^\/r\/?/, "");
   if (!raw) return res.status(400).send("Bad request");
 
+  const hadTrailingSlash = raw.endsWith("/");
   const segs = raw.split("/").filter(Boolean);
   if (segs.length < 1) return res.status(400).send("Bad request");
 
@@ -192,6 +193,7 @@ export default async function handler(req, res) {
     }
     if (!origin.startsWith("http")) return res.status(400).send("Bad request");
     restPath = segs.length > 1 ? "/" + segs.slice(1).join("/") : "/";
+    if (hadTrailingSlash && !restPath.endsWith("/")) restPath += "/";
     upstream = origin + restPath + qs;
   }
 
