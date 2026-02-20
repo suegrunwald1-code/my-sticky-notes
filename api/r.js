@@ -78,7 +78,7 @@ function rewriteHtml(body, encodedOrigin, restPath) {
     `(function(){` +
     `var K=[83,116,105,99,107,121];` +
     `function E(s){var b=new TextEncoder().encode(s);var o="";for(var i=0;i<b.length;i++){o+=((b[i]^K[i%K.length]).toString(16)).padStart(2,"0")}return o}` +
-    `function R(u){try{var a=new URL(u,location.href);if(a.origin===location.origin&&a.pathname.startsWith("/r/"))return u;if(a.protocol==="data:"||a.protocol==="blob:"||a.protocol==="javascript:")return u;if(a.origin!==location.origin){return"/r/_/"+E(a.href)}var base=document.querySelector("base");if(base){var bh=base.href;var full=new URL(u,bh);if(full.origin!==location.origin)return"/r/_/"+E(full.href);if(full.pathname.startsWith("/r/")){var p=full.pathname.replace(/^\\/r\\/[^/]+/,"");var oh=full.pathname.match(/^\\/r\\/([^/]+)/);if(oh){try{var bytes=[];var h=oh[1];for(var i=0;i<h.length;i+=2){bytes.push(parseInt(h.substring(i,i+2),16)^K[(i/2)%K.length])}var orig=new TextDecoder().decode(new Uint8Array(bytes));return"/r/_/"+E(orig+p+full.search+full.hash)}catch(e){}}}}return u}catch(e){return u}}` +
+    `function R(u){try{var base=document.querySelector("base");var bh=base?base.href:location.href;var a=new URL(u,bh);if(a.protocol==="data:"||a.protocol==="blob:"||a.protocol==="javascript:")return u;if(a.origin!==location.origin){return"/r/_/"+E(a.href)}if(a.pathname.startsWith("/r/")){var p=a.pathname.replace(/^\\/r\\/[^/]+/,"");var oh=a.pathname.match(/^\\/r\\/([^/]+)/);if(oh){try{var bytes=[];var h=oh[1];for(var i=0;i<h.length;i+=2){bytes.push(parseInt(h.substring(i,i+2),16)^K[(i/2)%K.length])}var orig=new TextDecoder().decode(new Uint8Array(bytes));return"/r/_/"+E(orig+p+a.search+a.hash)}catch(e){}}}return u}catch(e){return u}}` +
     // Override fetch
     `var _f=window.fetch;window.fetch=function(a,b){if(typeof a==="string")a=R(a);else if(a&&a.url)a=new Request(R(a.url),a);return _f.call(this,a,b)};` +
     // Override XMLHttpRequest.open
@@ -234,7 +234,13 @@ export default async function handler(req, res) {
       if (!skip.has(key.toLowerCase())) res.setHeader(key, value);
     }
 
-    res.setHeader("content-type", ct);
+    // Fix WASM MIME type - browsers require application/wasm for WebAssembly.instantiateStreaming
+    const isWasm = upstream.endsWith(".wasm") || ct.includes("application/wasm");
+    if (isWasm) {
+      res.setHeader("content-type", "application/wasm");
+    } else {
+      res.setHeader("content-type", ct);
+    }
 
     const isHTML = ct.includes("text/html");
     const isCSS = ct.includes("text/css");
